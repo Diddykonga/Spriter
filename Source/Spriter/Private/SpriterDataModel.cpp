@@ -338,7 +338,7 @@ FSpriterSpatialInfo::FSpriterSpatialInfo()
 {
 }
 
-bool FSpriterSpatialInfo::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterSpatialInfo::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	double XDouble, YDouble, AngleDouble, ScaleXDouble, ScaleYDouble;
 
@@ -422,7 +422,7 @@ FSpriterFile::FSpriterFile()
 {
 }
 
-bool FSpriterFile::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterFile::ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -476,7 +476,7 @@ FSpriterFolder::FSpriterFolder()
 {
 }
 
-bool FSpriterFolder::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterFolder::ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -497,7 +497,7 @@ bool FSpriterFolder::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> 
 		{
 			int32 Index = Files.Add(FSpriterFile());
 
-			const bool bParsedFileOK = Files[Index].ParseFromJSON(Owner, FileDescriptor->AsObject(), LocalNameForErrors, bSilent);
+			const bool bParsedFileOK = Files[Index].ParseFromJSON(FileDescriptor->AsObject(), LocalNameForErrors, bSilent);
 			bSuccessfullyParsed = bSuccessfullyParsed && bParsedFileOK;
 		}
 	}
@@ -523,7 +523,7 @@ FSpriterMapInstruction::FSpriterMapInstruction()
 {
 }
 
-bool FSpriterMapInstruction::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterMapInstruction::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -557,7 +557,7 @@ FSpriterTagLineKey::FSpriterTagLineKey()
 {
 }
 
-bool FSpriterTagLineKey::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterTagLineKey::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -608,7 +608,7 @@ FSpriterTagLine::FSpriterTagLine()
 {
 }
 
-bool FSpriterTagLine::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterTagLine::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -645,7 +645,7 @@ FSpriterValLineKey::FSpriterValLineKey()
 {
 }
 
-bool FSpriterValLineKey::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterValLineKey::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -694,7 +694,7 @@ FSpriterValLine::FSpriterValLine()
 {
 }
 
-bool FSpriterValLine::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterValLine::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -735,7 +735,7 @@ FSpriterMeta::FSpriterMeta()
 {
 }
 
-bool FSpriterMeta::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterMeta::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -780,7 +780,7 @@ FSpriterRefCommon::FSpriterRefCommon()
 {
 }
 
-bool FSpriterRefCommon::ParseCommonFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterRefCommon::ParseCommonFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 	int32 ParentIndex;
@@ -793,13 +793,34 @@ bool FSpriterRefCommon::ParseCommonFromJSON(FSpriterSCON* Owner, FSpriterAnimati
 	{
 		if (Owner && Animation)
 		{
-			FString ParentName = Owner->Entities[0].Objects[ParentIndex].Name;
-			for (int32 T = 0; T < Animation->Timelines.Num(); ++T)
+			int32 BoneCount = 0;
+			FString ParentName = "";
+			for (FSpriterObjectInfo& Info : Owner->Objects)
 			{
-				if (Animation->Timelines[T].Name.Equals(ParentName, ESearchCase::IgnoreCase))
+				if (Info.ObjectType == ESpriterObjectType::Bone)
 				{
-					ParentTimelineIndex = T;
+					BoneCount++;
+					if (ParentIndex == (BoneCount - 1))
+					{
+						ParentName = Info.Name;
+					}
 				}
+			}
+
+			if (!ParentName.IsEmpty())
+			{
+				for (int32 T = 0; T < Animation->Timelines.Num(); ++T)
+				{
+					if (Animation->Timelines[T].Name.Equals(ParentName, ESearchCase::IgnoreCase))
+					{
+						ParentTimelineIndex = T;
+					}
+				}
+			}
+			else
+			{
+				SPRITER_IMPORT_ERROR(TEXT("Expected Parent Timeline, but none was found' using Parent Ref ID."), *NameForErrors);
+				bSuccessfullyParsed = false;
 			}
 		}
 	}
@@ -824,7 +845,7 @@ bool FSpriterRefCommon::ParseCommonFromJSON(FSpriterSCON* Owner, FSpriterAnimati
 //////////////////////////////////////////////////////////////////////////
 // FSpriterRef
 
-bool FSpriterRef::ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterRef::ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	const bool bSuccessfullyParsed = ParseCommonFromJSON(Owner, Animation, Tree, NameForErrors, bSilent);
 
@@ -841,7 +862,7 @@ FSpriterObjectRef::FSpriterObjectRef()
 {
 }
 
-bool FSpriterObjectRef::ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterObjectRef::ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = ParseCommonFromJSON(Owner, Animation, Tree, NameForErrors, bSilent);
 
@@ -865,7 +886,7 @@ FSpriterMainlineKey::FSpriterMainlineKey()
 {
 }
 
-bool FSpriterMainlineKey::ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterMainlineKey::ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -946,7 +967,7 @@ FSpriterTimelineKey::FSpriterTimelineKey()
 {
 }
 
-bool FSpriterTimelineKey::ParseBasicsFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterTimelineKey::ParseBasicsFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1021,7 +1042,7 @@ FSpriterFatTimelineKey::FSpriterFatTimelineKey()
 {
 }
 
-bool FSpriterFatTimelineKey::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType)
+bool FSpriterFatTimelineKey::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType)
 {
 	// Parse the common stuff shared for all object types
 	bool bSuccessfullyParsed = ParseBasicsFromJSON(Owner, Tree, NameForErrors, bSilent);
@@ -1060,7 +1081,7 @@ bool FSpriterFatTimelineKey::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJson
 	return bSuccessfullyParsed;
 }
 
-bool FSpriterFatTimelineKey::ParseBoneFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterFatTimelineKey::ParseBoneFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	const bool bSuccessfullyParsed = Info.ParseFromJSON(Owner, Tree, NameForErrors, bSilent);
 
@@ -1069,7 +1090,7 @@ bool FSpriterFatTimelineKey::ParseBoneFromJSON(FSpriterSCON* Owner, TSharedPtr<F
 	return bSuccessfullyParsed;
 }
 
-bool FSpriterFatTimelineKey::ParseObjectFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType)
+bool FSpriterFatTimelineKey::ParseObjectFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType)
 {
 	const bool bSuccessfullyParsed = Info.ParseFromJSON(Owner, Tree, NameForErrors, bSilent);
 
@@ -1121,7 +1142,7 @@ FSpriterTimeline::FSpriterTimeline()
 {
 }
 
-bool FSpriterTimeline::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterTimeline::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1197,7 +1218,7 @@ FSpriterEventLineKey::FSpriterEventLineKey()
 {
 }
 
-bool FSpriterEventLineKey::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterEventLineKey::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bParsedSuccessfully = true;
 
@@ -1221,7 +1242,7 @@ FSpriterEventLine::FSpriterEventLine()
 {
 }
 
-bool FSpriterEventLine::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterEventLine::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1272,7 +1293,7 @@ FSpriterAnimation::FSpriterAnimation()
 {
 }
 
-bool FSpriterAnimation::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterAnimation::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1388,7 +1409,7 @@ FSpriterCharacterMapData::FSpriterCharacterMapData()
 {
 }
 
-bool FSpriterCharacterMapData::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterCharacterMapData::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1433,7 +1454,7 @@ FSpriterVariableDefinition::FSpriterVariableDefinition()
 {
 }
 
-bool FSpriterVariableDefinition::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterVariableDefinition::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1499,7 +1520,7 @@ FSpriterObjectInfo::FSpriterObjectInfo()
 {
 }
 
-bool FSpriterObjectInfo::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterObjectInfo::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1574,7 +1595,7 @@ FSpriterEntity::FSpriterEntity()
 {
 }
 
-bool FSpriterEntity::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
+bool FSpriterEntity::ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent)
 {
 	bool bSuccessfullyParsed = true;
 
@@ -1595,7 +1616,7 @@ bool FSpriterEntity::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> 
 		{
 			int32 Index = Objects.Add(FSpriterObjectInfo());
 
-			const bool bParsedObjectInfoOK = Objects[Index].ParseFromJSON(Owner, ObjectDescriptor->AsObject(), LocalNameForErrors, bSilent);
+			const bool bParsedObjectInfoOK = Objects[Index].ParseFromJSON(this, ObjectDescriptor->AsObject(), LocalNameForErrors, bSilent);
 			bSuccessfullyParsed = bSuccessfullyParsed && bParsedObjectInfoOK;
 		}
 	}
@@ -1613,7 +1634,7 @@ bool FSpriterEntity::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> 
 		{
 			int32 Index = VariableDefinitions.Add(FSpriterVariableDefinition());
 
-			const bool bParsedVariableDefOK = VariableDefinitions[Index].ParseFromJSON(Owner, VariableDefinitionDescriptor->AsObject(), LocalNameForErrors, bSilent);
+			const bool bParsedVariableDefOK = VariableDefinitions[Index].ParseFromJSON(this, VariableDefinitionDescriptor->AsObject(), LocalNameForErrors, bSilent);
 			bSuccessfullyParsed = bSuccessfullyParsed && bParsedVariableDefOK;
 		}
 	}
@@ -1626,7 +1647,7 @@ bool FSpriterEntity::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> 
 		{
 			int32 Index = Animations.Add(FSpriterAnimation());
 
-			const bool bParsedAnimationOK = Animations[Index].ParseFromJSON(Owner, AnimationDescriptor->AsObject(), LocalNameForErrors, bSilent);
+			const bool bParsedAnimationOK = Animations[Index].ParseFromJSON(this,  AnimationDescriptor->AsObject(), LocalNameForErrors, bSilent);
 			bSuccessfullyParsed = bSuccessfullyParsed && bParsedAnimationOK;
 		}
 	}
@@ -1644,7 +1665,7 @@ bool FSpriterEntity::ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> 
 		{
 			int32 Index = CharacterMaps.Add(FSpriterCharacterMapData());
 
-			const bool bParsedCharacterMapSuccessfully = CharacterMaps[Index].ParseFromJSON(Owner, CharacterMapDescriptor->AsObject(), LocalNameForErrors, bSilent);
+			const bool bParsedCharacterMapSuccessfully = CharacterMaps[Index].ParseFromJSON(this, CharacterMapDescriptor->AsObject(), LocalNameForErrors, bSilent);
 			bSuccessfullyParsed = bSuccessfullyParsed && bParsedCharacterMapSuccessfully;
 		}
 	}
@@ -1727,7 +1748,7 @@ void FSpriterSCON::ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& Na
 			{
 				int32 Index = Folders.Add(FSpriterFolder());
 
-				const bool bParsedFolderOK = Folders[Index].ParseFromJSON(this, FolderDescriptor->AsObject(), NameForErrors, bSilent);
+				const bool bParsedFolderOK = Folders[Index].ParseFromJSON(FolderDescriptor->AsObject(), NameForErrors, bSilent);
 				bSuccessfullyParsed = bSuccessfullyParsed && bParsedFolderOK;
 			}
 		}
@@ -1745,7 +1766,7 @@ void FSpriterSCON::ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& Na
 			{
 				int32 Index = Entities.Add(FSpriterEntity());
 
-				const bool bParsedEntityOK = Entities[Index].ParseFromJSON(this, EntityDescriptor->AsObject(), NameForErrors, bSilent);
+				const bool bParsedEntityOK = Entities[Index].ParseFromJSON(EntityDescriptor->AsObject(), NameForErrors, bSilent);
 				bSuccessfullyParsed = bSuccessfullyParsed && bParsedEntityOK;
 			}
 		}

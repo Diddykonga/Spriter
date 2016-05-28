@@ -8,6 +8,8 @@
 #include "PaperSpriteComponent.h"
 #include "SpriterSkeletonComponent.generated.h"
 
+class USpriterSkeletonComponent;
+
 UENUM(BlueprintType)
 enum class ESpriterAnimationState : uint8
 {
@@ -22,6 +24,8 @@ struct SPRITER_API FSpriterBoneInstance
 	GENERATED_USTRUCT_BODY()
 
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		bool IsActive;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
 		FString Name;
@@ -69,8 +73,8 @@ public:
 	FSpriterSpriteInstance();
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAnimationEnded, const FSpriterAnimation&, EndedAnimation, const bool, WasForced);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAnimationStarted, const FSpriterAnimation&, StartedAnimation, const bool, FirstTime);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FAnimationEnded, USpriterSkeletonComponent*, Skeleton, const FSpriterAnimation&, EndedAnimation, const bool, WasForced);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FAnimationStarted, USpriterSkeletonComponent*, Skeleton, const FSpriterAnimation&, StartedAnimation, const bool, FirstTime);
 
 UCLASS( ClassGroup=(Spriter), meta=(BlueprintSpawnableComponent))
 class SPRITER_API USpriterSkeletonComponent : public USceneComponent
@@ -109,8 +113,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
 		float BlendDurationMS;
 
-	// The Current Animation
-	FSpriterAnimation* CurrentAnimation;
+	// The Active Entity
+	FSpriterEntity* ActiveEntity;
+
+	// The Active Animation
+	FSpriterAnimation* ActiveAnimation;
 
 	// The Animation to Blend to
 	FSpriterAnimation* NextAnimation;
@@ -130,6 +137,14 @@ public:
 	// Sets Skeleton if not the same, and populates Bone's and Sprite's arrays
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void SetSkeleton(USpriterImportData* NewSkeleton);
+
+	// Sets Active Entity if not the same, and populates Bone's and Sprite's arrays
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void SetActiveEntity(int32 EntityIndex);
+
+	// Sets Active Entity if not the same, and populates Bone's and Sprite's arrays
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void SetActiveEntityByName(const FString& EntityName);
 
 	// Set Character Map for Skeleton
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
@@ -178,7 +193,13 @@ public:
 
 	// Blueprint Data Grabbers
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
-		void GetEntity(FSpriterEntity& Entity);
+		void GetEntity(int32 EntityIndex, FSpriterEntity& Entity);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetEntityByName(const FString& EntityName, FSpriterEntity& Entity);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetActiveEntity(FSpriterEntity& Entity);
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void GetAnimation(int32 AnimationIndex, FSpriterAnimation& Animation);
@@ -187,7 +208,7 @@ public:
 		void GetAnimationByName(const FString& AnimationName, FSpriterAnimation& Animation);
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
-		void GetCurrentAnimation(FSpriterAnimation& Animation);
+		void GetActiveAnimation(FSpriterAnimation& Animation);
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void GetNextAnimation(FSpriterAnimation& Animation);
@@ -197,6 +218,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void GetTimelineByName(UPARAM(ref)FSpriterAnimation& Animation, const FString& TimelineName, FSpriterTimeline& Timeline);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetBoneRef(UPARAM(ref)FSpriterAnimation& Animation, UPARAM(ref)FSpriterMainlineKey& Key, const FString& BoneName, FSpriterRef& BoneRef);
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void GetObjectRef(UPARAM(ref)FSpriterAnimation& Animation, UPARAM(ref)FSpriterMainlineKey& Key, const FString& ObjectName, FSpriterObjectRef& ObjectRef);
@@ -231,6 +255,36 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		static float ToSeconds(int32 MS);
 
+
+	// C++ Data Grabbers
+	FSpriterEntity* GetEntity(int32 EntityIndex);
+
+	FSpriterEntity* GetEntity(const FString& EntityName);
+
+	FSpriterAnimation* GetAnimation(int32 AnimationIndex);
+
+	FSpriterAnimation* GetAnimation(const FString& AnimationName);
+
+	FSpriterTimeline* GetTimeline(FSpriterAnimation& Animation, int32 TimelineIndex);
+
+	FSpriterTimeline* GetTimeline(FSpriterAnimation& Animation, const FString& TimelineName);
+
+	FSpriterRef* GetBoneRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& BoneName);
+
+	FSpriterObjectRef* GetObjectRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& ObjectName);
+
+	FSpriterObjectInfo* GetObjectInfo(int32 ObjectIndex);
+
+	FSpriterObjectInfo* GetObjectInfo(const FString& ObjectName);
+
+	FSpriterFile* GetFile(int32 Folder, int32 File);
+
+
+	// C++ Instance Grabbers
+	FSpriterBoneInstance* GetBone(const FString& BoneName);
+
+	FSpriterSpriteInstance* GetSprite(const FString& SpriteName);
+
 	// Amount to offset Sprites according to thier ZIndex
 	static const float SPRITER_ZOFFSET;
 
@@ -245,31 +299,5 @@ protected:
 
 	TArray<FSpriterMainlineKey*>* GetMainlineKeys();
 
-	TArray<FSpriterFatTimelineKey*>* GetTimelineKeys(const FString& ObjectName);
-
-
-	// Data Grabbers
-	FSpriterEntity* GetEntity();
-
-	FSpriterAnimation* GetAnimation(int32 AnimationIndex);
-
-	FSpriterAnimation* GetAnimation(const FString& AnimationName);
-
-	FSpriterTimeline* GetTimeline(FSpriterAnimation& Animation, int32 TimelineIndex);
-
-	FSpriterTimeline* GetTimeline(FSpriterAnimation& Animation, const FString& TimelineName);
-
-	FSpriterObjectRef* GetObjectRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& ObjectName);
-
-	FSpriterObjectInfo* GetObjectInfo(int32 ObjectIndex);
-
-	FSpriterObjectInfo* GetObjectInfo(const FString& ObjectName);
-
-	FSpriterFile* GetFile(int32 Folder, int32 File);
-
-
-	// Instance Grabbers
-	FSpriterBoneInstance* GetBone(const FString& BoneName);
-
-	FSpriterSpriteInstance* GetSprite(const FString& SpriteName);
+	TArray<FSpriterFatTimelineKey*>* GetTimelineKeys(const FString& TimelineName);
 };

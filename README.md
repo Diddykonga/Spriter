@@ -5,6 +5,7 @@ Currently Supported Spriter Features:
   * Bone Animation
   * Sprite Animation
   * Character Maps
+  * Multiple Entities
   
 Currently Supported Runtime Features:
   * Animation Blending

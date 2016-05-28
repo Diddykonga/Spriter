@@ -4,7 +4,7 @@
 #include "SpriterSkeletonComponent.h"
 
 // Static's Initialization
-const float USpriterSkeletonComponent::SPRITER_ZOFFSET = 3.0f;
+const float USpriterSkeletonComponent::SPRITER_ZOFFSET = 2.0f;
 
 USpriterSkeletonComponent::USpriterSkeletonComponent()
 {
@@ -19,7 +19,8 @@ USpriterSkeletonComponent::USpriterSkeletonComponent()
 }
 
 FSpriterBoneInstance::FSpriterBoneInstance()
-	: Name("")
+	: IsActive(true)
+	, Name("")
 	, ParentBoneName("")
 	, RelativeTransform()
 	, WorldTransform()
@@ -54,14 +55,14 @@ void USpriterSkeletonComponent::TickComponent( float DeltaTime, ELevelTick TickT
 		//Update our Blending to the Next Animation
 		if (AnimationState == ESpriterAnimationState::BLENDING)
 		{
-			if (CurrentAnimation && NextAnimation)
+			if (ActiveAnimation && NextAnimation)
 			{
 				if (CurrentBlendTimeMS >= BlendDurationMS)
 				{
 					CurrentTimeMS = 0.f;
 					CurrentBlendTimeMS = 0.f;
 					BlendDurationMS = 0.f;
-					CurrentAnimation = NextAnimation;
+					ActiveAnimation = NextAnimation;
 					NextAnimation = nullptr;
 					AnimationState = ESpriterAnimationState::PLAYING;
 
@@ -84,16 +85,16 @@ void USpriterSkeletonComponent::TickComponent( float DeltaTime, ELevelTick TickT
 		// Update our Playing of our Current Animation
 		else if (AnimationState == ESpriterAnimationState::PLAYING)
 		{
-			if (CurrentAnimation)
+			if (ActiveAnimation)
 			{
-				if (CurrentTimeMS >= CurrentAnimation->LengthInMS)
+				if (CurrentTimeMS >= ActiveAnimation->LengthInMS)
 				{
 					UpdateBones();
 					UpdateSprites();
 
-					OnAnimationEnded.Broadcast(*CurrentAnimation, false);
+					OnAnimationEnded.Broadcast(this, *ActiveAnimation, false);
 
-					if (CurrentAnimation->bIsLooping)
+					if (ActiveAnimation->bIsLooping)
 					{
 						CurrentTimeMS = 0;
 					}
@@ -101,7 +102,7 @@ void USpriterSkeletonComponent::TickComponent( float DeltaTime, ELevelTick TickT
 					{
 						AnimationState = ESpriterAnimationState::NONE;
 
-						OnAnimationEnded.Broadcast(*CurrentAnimation, false);
+						OnAnimationEnded.Broadcast(this, *ActiveAnimation, false);
 						return;
 					}
 				}
@@ -113,12 +114,12 @@ void USpriterSkeletonComponent::TickComponent( float DeltaTime, ELevelTick TickT
 					if (CurrentTimeMS == 0)
 					{
 						bool FirstTime = bAnimationWasStarted;
-						OnAnimationStarted.Broadcast(*CurrentAnimation, FirstTime);
+						OnAnimationStarted.Broadcast(this, *ActiveAnimation, FirstTime);
 
 						bAnimationWasStarted = false;
 					}
 
-					CurrentTimeMS = FMath::Min<int32>(CurrentAnimation->LengthInMS, (CurrentTimeMS + ToMS(DeltaTime)));
+					CurrentTimeMS = FMath::Min<int32>(ActiveAnimation->LengthInMS, (CurrentTimeMS + ToMS(DeltaTime)));
 				}
 			}
 		}
@@ -140,6 +141,32 @@ void USpriterSkeletonComponent::SetSkeleton(USpriterImportData * NewSkeleton)
 
 	Skeleton = NewSkeleton;
 	InitSkeleton();
+}
+
+void USpriterSkeletonComponent::SetActiveEntity(int32 EntityIndex)
+{
+	if (Skeleton && Skeleton->ImportedData.Entities.IsValidIndex(EntityIndex))
+	{
+		FSpriterEntity* Entity = GetEntity(EntityIndex);
+		if (Entity && ActiveEntity != Entity)
+		{
+			ActiveEntity = Entity;
+			InitSkeleton();
+		}
+	}
+}
+
+void USpriterSkeletonComponent::SetActiveEntityByName(const FString & EntityName)
+{
+	if (Skeleton && !EntityName.IsEmpty())
+	{
+		FSpriterEntity* Entity = GetEntity(EntityName);
+		if (Entity && ActiveEntity != Entity)
+		{
+			ActiveEntity = Entity;
+			InitSkeleton();
+		}
+	}
 }
 
 void USpriterSkeletonComponent::SetCharacterMap(USpriterCharacterMap * Map)
@@ -188,7 +215,7 @@ void USpriterSkeletonComponent::PlayAnimation(const FString& AnimationName, floa
 	{
 		if(BlendLengthMS > 0)
 		{
-			if (!CurrentAnimation)
+			if (!ActiveAnimation)
 			{
 				SetToSetupPose();
 
@@ -204,17 +231,17 @@ void USpriterSkeletonComponent::PlayAnimation(const FString& AnimationName, floa
 				BlendDurationMS = BlendLengthMS;
 				AnimationState = ESpriterAnimationState::BLENDING;
 
-				OnAnimationEnded.Broadcast(*CurrentAnimation, true);
+				OnAnimationEnded.Broadcast(this, *ActiveAnimation, true);
 			}
 		}
 		else
 		{
-			if (CurrentAnimation)
+			if (ActiveAnimation)
 			{
-				OnAnimationEnded.Broadcast(*CurrentAnimation, true);
+				OnAnimationEnded.Broadcast(this, *ActiveAnimation, true);
 			}
 
-			CurrentAnimation = GetAnimation(AnimationName);
+			ActiveAnimation = GetAnimation(AnimationName);
 			NextAnimation = nullptr;
 			CurrentTimeMS = 0.f;
 			CurrentBlendTimeMS = 0.f;
@@ -228,13 +255,13 @@ void USpriterSkeletonComponent::PlayAnimation(const FString& AnimationName, floa
 
 void USpriterSkeletonComponent::ResumeAnimation()
 {
-	if (IsInitialized(true) && CurrentAnimation)
+	if (IsInitialized(true) && ActiveAnimation)
 	{	
 		if (AnimationState == ESpriterAnimationState::NONE)
 		{
-			if (CurrentTimeMS <= CurrentAnimation->LengthInMS || CurrentAnimation->bIsLooping)
+			if (CurrentTimeMS <= ActiveAnimation->LengthInMS || ActiveAnimation->bIsLooping)
 			{
-				if (CurrentTimeMS >= CurrentAnimation->LengthInMS)
+				if (CurrentTimeMS >= ActiveAnimation->LengthInMS)
 				{
 				CurrentTimeMS = 0.f;
 				}
@@ -264,30 +291,40 @@ void USpriterSkeletonComponent::InitSkeleton()
 
 	if (Skeleton)
 	{
-		FSpriterEntity* Entity = GetEntity();
-		FSpriterAnimation* FirstAnimation = GetAnimation(0);
-
-		// Loop through Object Infos, and create Bones and Sprites for Skeleton
-		if (Entity && FirstAnimation)
+		if (!ActiveEntity)
 		{
-			for (FSpriterObjectInfo& Obj : Entity->Objects)
+			ActiveEntity = GetEntity(0);
+		}
+		TArray<FString> SpritesToCreate = TArray<FString>();
+
+		if (ActiveEntity)
+		{
+			// Loop through Object Infos, and create Bones
+			for (FSpriterObjectInfo& Obj : ActiveEntity->Objects)
 			{
 				if (Obj.ObjectType == ESpriterObjectType::Bone)
 				{
 					FSpriterBoneInstance Bone = FSpriterBoneInstance();
 					Bone.Name = Obj.Name;
 
-					for (FSpriterRef& BoneRef : FirstAnimation->MainlineKeys[0].BoneRefs)
+					// Setup Bones Parent
+					for (FSpriterAnimation& Animation : ActiveEntity->Animations)
 					{
-						if (BoneRef.ParentTimelineIndex != INDEX_NONE && BoneRef.TimelineIndex != INDEX_NONE)
+						FSpriterRef* BoneRef = GetBoneRef(Animation, Animation.MainlineKeys[0], Obj.Name);
+
+						if (BoneRef)
 						{
-							FSpriterTimeline* Timeline = GetTimeline(*FirstAnimation, BoneRef.TimelineIndex);
-							FSpriterTimeline* ParentTimeline = GetTimeline(*FirstAnimation, BoneRef.ParentTimelineIndex);
-							if (Timeline && ParentTimeline)
+							if (BoneRef->ParentTimelineIndex != INDEX_NONE && BoneRef->TimelineIndex != INDEX_NONE)
 							{
-								if (Timeline->Name.Equals(Obj.Name, ESearchCase::IgnoreCase))
+								FSpriterTimeline* Timeline = GetTimeline(Animation, BoneRef->TimelineIndex);
+								FSpriterTimeline* ParentTimeline = GetTimeline(Animation, BoneRef->ParentTimelineIndex);
+								if (Timeline && ParentTimeline)
 								{
-									Bone.ParentBoneName = ParentTimeline->Name;
+									if (Timeline->Name.Equals(Obj.Name, ESearchCase::IgnoreCase))
+									{
+										Bone.ParentBoneName = ParentTimeline->Name;
+										break;
+									}
 								}
 							}
 						}
@@ -295,32 +332,32 @@ void USpriterSkeletonComponent::InitSkeleton()
 
 					Bones.Add(Bone);
 				}
-				else if (Obj.ObjectType == ESpriterObjectType::Sprite)
+			}
+
+			// Loop Through all Timelines to find all Sprites that need to be Created
+			for (FSpriterAnimation& Animation : ActiveEntity->Animations)
+			{
+				for (FSpriterTimeline& Timeline : Animation.Timelines)
 				{
-					FSpriterSpriteInstance Sprite = FSpriterSpriteInstance();
-					Sprite.Name = Obj.Name;
-
-					for (FSpriterObjectRef& SpriteRef : FirstAnimation->MainlineKeys[0].ObjectRefs)
+					if (Timeline.ObjectType == ESpriterObjectType::Sprite)
 					{
-						if (SpriteRef.ParentTimelineIndex != INDEX_NONE && SpriteRef.TimelineIndex != INDEX_NONE)
-						{
-							FSpriterTimeline* Timeline = GetTimeline(*FirstAnimation, SpriteRef.TimelineIndex);
-							FSpriterTimeline* ParentTimeline = GetTimeline(*FirstAnimation, SpriteRef.ParentTimelineIndex);
-
-							if (Timeline->Name.Equals(Obj.Name, ESearchCase::IgnoreCase))
-							{
-								Sprite.ParentBoneName = ParentTimeline->Name;
-							}
-						}
+						SpritesToCreate.AddUnique(Timeline.Name);
 					}
-
-					Sprite.SpriteComponent = NewObject<UPaperSpriteComponent>((UObject*)Owner, FName(*Obj.Name));
-					Sprite.SpriteComponent->AttachTo(this);
-					Sprite.SpriteComponent->bWantsBeginPlay = true;
-					Sprite.SpriteComponent->RegisterComponent();
-
-					Sprites.Add(Sprite);
 				}
+			}
+
+			// Create all necessary Sprites
+			for (FString& SpriteName : SpritesToCreate)
+			{
+				FSpriterSpriteInstance Sprite = FSpriterSpriteInstance();
+				Sprite.Name = SpriteName;
+
+				Sprite.SpriteComponent = NewObject<UPaperSpriteComponent>((UObject*)Owner, FName(*SpriteName));
+				Sprite.SpriteComponent->AttachTo(this);
+				Sprite.SpriteComponent->bWantsBeginPlay = true;
+				Sprite.SpriteComponent->RegisterComponent();
+
+				Sprites.Add(Sprite);
 			}
 		}
 	}
@@ -338,7 +375,7 @@ void USpriterSkeletonComponent::SetToSetupPose()
 		CurrentBlendTimeMS = 0.f;
 		BlendDurationMS = 0.f;
 		CurrentTimeMS = 0.f;
-		CurrentAnimation = GetAnimation(0);
+		ActiveAnimation = GetAnimation(0);
 
 		UpdateBones();
 		UpdateSprites();
@@ -351,77 +388,177 @@ void USpriterSkeletonComponent::UpdateBones()
 {
 	if (IsInitialized(true))
 	{
+		TArray<FSpriterMainlineKey*>& MainKeys = *GetMainlineKeys();
 		float Alpha = 0.f;
 		float C1 = 0.f;
 		float C2 = 0.f;
 
+		// Finding Alpha for Mainline Keys
+		if (MainKeys.Num() >= 2)
+		{
+			if (AnimationState == ESpriterAnimationState::BLENDING)
+			{
+				C1 = CurrentBlendTimeMS;
+				C2 = BlendDurationMS;
+			}
+			else if (AnimationState == ESpriterAnimationState::PLAYING)
+			{
+				if (MainKeys[1]->TimeInMS == 0 && ActiveAnimation)
+				{
+					C1 = (CurrentTimeMS - MainKeys[0]->TimeInMS);
+					C2 = (ActiveAnimation->LengthInMS - MainKeys[0]->TimeInMS);
+				}
+				else
+				{
+					C1 = (CurrentTimeMS - MainKeys[0]->TimeInMS);
+					C2 = (MainKeys[1]->TimeInMS - MainKeys[0]->TimeInMS);
+				}
+			}
+
+			if (MainKeys[0]->TimeInMS == MainKeys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
+			{
+				Alpha = 0;
+			}
+			else if (C2 == 0)
+			{
+				Alpha = 0;
+			}
+			else
+			{
+				Alpha = C1 / C2;
+			}
+		}
+
 		for (FSpriterBoneInstance& Bone : Bones)
 		{
-			TArray<FSpriterFatTimelineKey*>& Keys = *GetTimelineKeys(Bone.Name);
-			if (Keys.Num() >= 2)
+			// Check if Bone is Referenced in Mainline
+			if (MainKeys.Num() >= 2)
 			{
+				FSpriterRef* Ref;
 				if (AnimationState == ESpriterAnimationState::BLENDING)
 				{
-					C1 = CurrentBlendTimeMS;
-					C2 = BlendDurationMS;
-				}
-				else if (AnimationState == ESpriterAnimationState::PLAYING)
-				{
-					if (Keys[1]->TimeInMS == 0 && CurrentAnimation)
+					if (Alpha == 1)
 					{
-						C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
-						C2 = (CurrentAnimation->LengthInMS - Keys[0]->TimeInMS);
+						Ref = GetBoneRef(*NextAnimation, *MainKeys[1], Bone.Name);
 					}
 					else
 					{
-						C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
-						C2 = (Keys[1]->TimeInMS - Keys[0]->TimeInMS);
+						Ref = GetBoneRef(*ActiveAnimation, *MainKeys[0], Bone.Name);
 					}
-				}
-
-				if (Keys[0]->TimeInMS == Keys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
-				{
-					Alpha = 0;
-				}
-				else if (C2 == 0)
-				{
-					Alpha = 0;
 				}
 				else
 				{
-					Alpha = C1 / C2;
-				}
-
-				FTransform RelativeTransform = FTransform();
-				FTransform FirstTransform = Keys[0]->Info.ConvertToTransform();
-				FTransform SecondTransform = Keys[1]->Info.ConvertToTransform();
-				float SpinCorrection = 0;
-				if (Keys[0]->Spin > 0 && (FirstTransform.Rotator().Pitch > SecondTransform.Rotator().Pitch))
-				{
-					SpinCorrection = 360;
-				}
-				else if (Keys[0]->Spin < 0 && (SecondTransform.Rotator().Pitch > FirstTransform.Rotator().Pitch))
-				{
-					SpinCorrection = -360;
-				}
-
-				RelativeTransform.SetLocation(FMath::Lerp(FirstTransform.GetLocation(), SecondTransform.GetLocation(), Alpha));
-				RelativeTransform.SetRotation(FQuat::Slerp_NotNormalized(FirstTransform.GetRotation(), (SecondTransform.Rotator() + FRotator(SpinCorrection, 0, 0)).Quaternion(), Alpha));
-				RelativeTransform.SetScale3D(FMath::Lerp(FirstTransform.GetScale3D(), SecondTransform.GetScale3D(), Alpha));
-
-				Bone.RelativeTransform = RelativeTransform;
-				Bone.RelativeTransform.SetLocation(Bone.RelativeTransform.GetLocation() / Skeleton->PixelsPerUnrealUnit);
-				if (!Bone.ParentBoneName.IsEmpty())
-				{
-					FSpriterBoneInstance* Parent = GetBone(Bone.ParentBoneName);
-					if (Parent)
+					if (Alpha == 1)
 					{
-						FTransform::Multiply(&Bone.WorldTransform, &Bone.RelativeTransform, &Parent->WorldTransform);
+						Ref = GetBoneRef(*ActiveAnimation, *MainKeys[1], Bone.Name);
+					}
+					else
+					{
+						Ref = GetBoneRef(*ActiveAnimation, *MainKeys[0], Bone.Name);
+					}
+				}
+
+				if (Ref)
+				{
+					Bone.IsActive = true;
+					
+					if (Bone.IsActive)
+					{
+						/*FSpriterTimeline* ParentTimeline = nullptr;
+						if (AnimationState == ESpriterAnimationState::BLENDING)
+						{
+							if (Alpha == 1)
+							{
+								ParentTimeline = GetTimeline(*NextAnimation, Ref->ParentTimelineIndex);
+							}
+						}
+						else
+						{
+							ParentTimeline = GetTimeline(*ActiveAnimation, Ref->ParentTimelineIndex);
+						}
+
+						if (ParentTimeline)
+						{
+							Sprite.ParentBoneName = ParentTimeline->Name;
+						}*/
+
 					}
 				}
 				else
 				{
-					Bone.WorldTransform = RelativeTransform;
+					Bone.IsActive = false;
+				}
+			}
+
+			// Update Bone if Referenced in Mainline
+			if (Bone.IsActive)
+			{
+				TArray<FSpriterFatTimelineKey*>& Keys = *GetTimelineKeys(Bone.Name);
+				if (Keys.Num() >= 2)
+				{
+					if (AnimationState == ESpriterAnimationState::BLENDING)
+					{
+						C1 = CurrentBlendTimeMS;
+						C2 = BlendDurationMS;
+					}
+					else if (AnimationState == ESpriterAnimationState::PLAYING)
+					{
+						if (Keys[1]->TimeInMS == 0 && ActiveAnimation)
+						{
+							C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
+							C2 = (ActiveAnimation->LengthInMS - Keys[0]->TimeInMS);
+						}
+						else
+						{
+							C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
+							C2 = (Keys[1]->TimeInMS - Keys[0]->TimeInMS);
+						}
+					}
+
+					if (Keys[0]->TimeInMS == Keys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
+					{
+						Alpha = 0;
+					}
+					else if (C2 == 0)
+					{
+						Alpha = 0;
+					}
+					else
+					{
+						Alpha = C1 / C2;
+					}
+
+					FTransform RelativeTransform = FTransform();
+					FTransform FirstTransform = Keys[0]->Info.ConvertToTransform();
+					FTransform SecondTransform = Keys[1]->Info.ConvertToTransform();
+					float SpinCorrection = 0;
+					if (Keys[0]->Spin > 0 && (FirstTransform.Rotator().Pitch > SecondTransform.Rotator().Pitch))
+					{
+						SpinCorrection = 360;
+					}
+					else if (Keys[0]->Spin < 0 && (SecondTransform.Rotator().Pitch > FirstTransform.Rotator().Pitch))
+					{
+						SpinCorrection = -360;
+					}
+
+					RelativeTransform.SetLocation(FMath::Lerp(FirstTransform.GetLocation(), SecondTransform.GetLocation(), Alpha));
+					RelativeTransform.SetRotation(FQuat::Slerp_NotNormalized(FirstTransform.GetRotation(), (SecondTransform.Rotator() + FRotator(SpinCorrection, 0, 0)).Quaternion(), Alpha));
+					RelativeTransform.SetScale3D(FMath::Lerp(FirstTransform.GetScale3D(), SecondTransform.GetScale3D(), Alpha));
+
+					Bone.RelativeTransform = RelativeTransform;
+					Bone.RelativeTransform.SetLocation(Bone.RelativeTransform.GetLocation() / Skeleton->PixelsPerUnrealUnit);
+					if (!Bone.ParentBoneName.IsEmpty())
+					{
+						FSpriterBoneInstance* Parent = GetBone(Bone.ParentBoneName);
+						if (Parent)
+						{
+							FTransform::Multiply(&Bone.WorldTransform, &Bone.RelativeTransform, &Parent->WorldTransform);
+						}
+					}
+					else
+					{
+						Bone.WorldTransform = RelativeTransform;
+					}
 				}
 			}
 		}
@@ -437,107 +574,146 @@ void USpriterSkeletonComponent::UpdateSprites()
 		float C1 = 0.f;
 		float C2 = 0.f;
 
-		for (FSpriterSpriteInstance& Sprite : Sprites)
+		// Finding Alpha for Mainline Keys
+		if (MainKeys.Num() >= 2)
 		{
-			TArray<FSpriterFatTimelineKey*>& Keys = *GetTimelineKeys(Sprite.Name);
-			if (Keys.Num() >= 2)
+			if (AnimationState == ESpriterAnimationState::BLENDING)
 			{
-				if (AnimationState == ESpriterAnimationState::BLENDING)
+				C1 = CurrentBlendTimeMS;
+				C2 = BlendDurationMS;
+			}
+			else if (AnimationState == ESpriterAnimationState::PLAYING)
+			{
+				if (MainKeys[1]->TimeInMS == 0 && ActiveAnimation)
 				{
-					C1 = CurrentBlendTimeMS;
-					C2 = BlendDurationMS;
-				}
-				else if (AnimationState == ESpriterAnimationState::PLAYING)
-				{
-					if (Keys[1]->TimeInMS == 0 && CurrentAnimation)
-					{
-						C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
-						C2 = (CurrentAnimation->LengthInMS - Keys[0]->TimeInMS);
-					}
-					else
-					{
-						C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
-						C2 = (Keys[1]->TimeInMS - Keys[0]->TimeInMS);
-					}
-				}
-
-				if (Keys[0]->TimeInMS == Keys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
-				{
-					Alpha = 0;
-				}
-				else if (C2 == 0)
-				{
-					Alpha = 0;
+					C1 = (CurrentTimeMS - MainKeys[0]->TimeInMS);
+					C2 = (ActiveAnimation->LengthInMS - MainKeys[0]->TimeInMS);
 				}
 				else
 				{
-					Alpha = C1 / C2;
+					C1 = (CurrentTimeMS - MainKeys[0]->TimeInMS);
+					C2 = (MainKeys[1]->TimeInMS - MainKeys[0]->TimeInMS);
+				}
+			}
+
+			if (MainKeys[0]->TimeInMS == MainKeys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
+			{
+				Alpha = 0;
+			}
+			else if (C2 == 0)
+			{
+				Alpha = 0;
+			}
+			else
+			{
+				Alpha = C1 / C2;
+			}
+		}
+
+		for (FSpriterSpriteInstance& Sprite : Sprites)
+		{
+			// Check if Sprite is Referenced in Mainline
+			if (MainKeys.Num() >= 2)
+			{
+				FSpriterObjectRef* Ref;
+				if (AnimationState == ESpriterAnimationState::BLENDING)
+				{
+					if (Alpha == 1)
+					{
+						Ref = GetObjectRef(*NextAnimation, *MainKeys[1], Sprite.Name);
+					}
+					else
+					{
+						Ref = GetObjectRef(*ActiveAnimation, *MainKeys[0], Sprite.Name);
+					}
+				}
+				else
+				{
+					if (Alpha == 1)
+					{
+						Ref = GetObjectRef(*ActiveAnimation, *MainKeys[1], Sprite.Name);
+					}
+					else
+					{
+						Ref = GetObjectRef(*ActiveAnimation, *MainKeys[0], Sprite.Name);
+					}
 				}
 
-				// Update Sprite From Mainline
-				if (MainKeys.Num() >= 2)
+				if (Ref)
 				{
-					FSpriterObjectRef* Ref;
+					Sprite.IsActive = true;
+					Sprite.SpriteComponent->Activate(true);
+
+					if (Sprite.IsActive)
+					{
+						FSpriterTimeline* ParentTimeline = nullptr;
+						if (AnimationState == ESpriterAnimationState::BLENDING)
+						{
+							if (Alpha == 1)
+							{
+								ParentTimeline = GetTimeline(*NextAnimation, Ref->ParentTimelineIndex);
+							}
+						}
+						else
+						{
+							ParentTimeline = GetTimeline(*ActiveAnimation, Ref->ParentTimelineIndex);
+						}
+
+						if (ParentTimeline)
+						{
+							Sprite.ParentBoneName = ParentTimeline->Name;
+						}
+
+						Sprite.ZIndex = Ref->ZIndex;
+					}
+				}
+				else
+				{
+					Sprite.IsActive = false;
+					Sprite.SpriteComponent->Activate(false);
+				}
+			}
+
+			// Update Sprite if Referenced in Mainline
+			if (Sprite.IsActive)
+			{
+				TArray<FSpriterFatTimelineKey*>& Keys = *GetTimelineKeys(Sprite.Name);
+				if (Keys.Num() >= 2)
+				{
+					// Finding Alpha for Timeline Keys
 					if (AnimationState == ESpriterAnimationState::BLENDING)
 					{
-						if (Alpha == 1)
+						C1 = CurrentBlendTimeMS;
+						C2 = BlendDurationMS;
+					}
+					else if (AnimationState == ESpriterAnimationState::PLAYING)
+					{
+						if (Keys[1]->TimeInMS == 0 && ActiveAnimation)
 						{
-							Ref = GetObjectRef(*NextAnimation, *MainKeys[1], Sprite.Name);
+							C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
+							C2 = (ActiveAnimation->LengthInMS - Keys[0]->TimeInMS);
 						}
 						else
 						{
-							Ref = GetObjectRef(*CurrentAnimation, *MainKeys[0], Sprite.Name);
+							C1 = (CurrentTimeMS - Keys[0]->TimeInMS);
+							C2 = (Keys[1]->TimeInMS - Keys[0]->TimeInMS);
 						}
+					}
+
+					if (Keys[0]->TimeInMS == Keys[1]->TimeInMS && AnimationState == ESpriterAnimationState::PLAYING)
+					{
+						Alpha = 0;
+					}
+					else if (C2 == 0)
+					{
+						Alpha = 0;
 					}
 					else
 					{
-						if (Alpha == 1)
-						{
-							Ref = GetObjectRef(*CurrentAnimation, *MainKeys[1], Sprite.Name);
-						}
-						else
-						{
-							Ref = GetObjectRef(*CurrentAnimation, *MainKeys[0], Sprite.Name);
-						}
+						Alpha = C1 / C2;
 					}
 
-					if (Ref)
-					{
-						Sprite.IsActive = true;
-						Sprite.SpriteComponent->Activate(true);
-
-						if (Sprite.IsActive)
-						{
-							FSpriterTimeline* ParentTimeline = nullptr;
-							if (AnimationState == ESpriterAnimationState::BLENDING)
-							{
-								if (Alpha == 1)
-								{
-									ParentTimeline = GetTimeline(*NextAnimation, Ref->ParentTimelineIndex);
-								}
-							}
-							else
-							{
-								ParentTimeline = GetTimeline(*CurrentAnimation, Ref->ParentTimelineIndex);
-							}
-
-							if (ParentTimeline)
-							{
-								Sprite.ParentBoneName = ParentTimeline->Name;
-							}
-
-							Sprite.ZIndex = Ref->ZIndex;
-						}
-					}
-					else
-					{
-						Sprite.IsActive = false;
-						Sprite.SpriteComponent->Activate(false);
-					}
-				}
-
-				if (Sprite.IsActive)
-				{
+					// Updating Sprite from Timeline Keys
 					FTransform RelativeTransform = FTransform();
 					FTransform FirstTransform = Keys[0]->Info.ConvertToTransform();
 					FTransform SecondTransform = Keys[1]->Info.ConvertToTransform();
@@ -581,12 +757,12 @@ void USpriterSkeletonComponent::UpdateSprites()
 						Sprite.SpriteComponent->SetSprite(PaperSprite);
 					}
 				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_UpdateSprites() : Couldnt Find 2 Timeline Keys!"));
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_UpdateSprites() : Couldnt Find 2 Timeline Keys!"));
 
-				return;
+					return;
+				}
 			}
 		}
 	}
@@ -606,12 +782,35 @@ void USpriterSkeletonComponent::CleanupObjects()
 	Sprites.Empty();
 }
 
+
 // Blueprint Data Grabbers
-void USpriterSkeletonComponent::GetEntity(FSpriterEntity& Entity)
+void USpriterSkeletonComponent::GetEntity(int32 EntityIndex, FSpriterEntity& Entity)
 {
-	if (Skeleton  && Skeleton->ImportedData.Entities.Num() > 0)
+	if (Skeleton  && Skeleton->ImportedData.Entities.IsValidIndex(EntityIndex))
 	{
-		Entity = Skeleton->ImportedData.Entities[0];
+		Entity = Skeleton->ImportedData.Entities[EntityIndex];
+	}
+}
+
+void USpriterSkeletonComponent::GetEntityByName(const FString& EntityName, FSpriterEntity& Entity)
+{
+	if (Skeleton  && Skeleton->ImportedData.Entities.Num() > 0 && !EntityName.IsEmpty())
+	{
+		for (FSpriterEntity& Ent : Skeleton->ImportedData.Entities)
+		{
+			if (Ent.Name.Equals(EntityName, ESearchCase::IgnoreCase))
+			{
+				Entity = Ent;
+			}
+		}
+	}
+}
+
+void USpriterSkeletonComponent::GetActiveEntity(FSpriterEntity& Entity)
+{
+	if (Skeleton  && ActiveEntity)
+	{
+		Entity = *ActiveEntity;
 	}
 }
 
@@ -619,12 +818,11 @@ void USpriterSkeletonComponent::GetAnimation(int32 AnimationIndex, FSpriterAnima
 {
 	if (Skeleton)
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			if (AnimationIndex >= 0 && AnimationIndex < Entity->Animations.Num())
+			if (ActiveEntity->Animations.IsValidIndex(AnimationIndex))
 			{
-				Animation = Entity->Animations[AnimationIndex];
+				Animation = ActiveEntity->Animations[AnimationIndex];
 			}
 		}
 	}
@@ -634,10 +832,9 @@ void USpriterSkeletonComponent::GetAnimationByName(const FString& AnimationName,
 {
 	if (Skeleton && !AnimationName.IsEmpty())
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			for (FSpriterAnimation& Anim : Entity->Animations)
+			for (FSpriterAnimation& Anim : ActiveEntity->Animations)
 			{
 				if (Anim.Name.Equals(AnimationName, ESearchCase::IgnoreCase))
 				{
@@ -648,17 +845,17 @@ void USpriterSkeletonComponent::GetAnimationByName(const FString& AnimationName,
 	}
 }
 
-void USpriterSkeletonComponent::GetCurrentAnimation(FSpriterAnimation& Animation)
+void USpriterSkeletonComponent::GetActiveAnimation(FSpriterAnimation& Animation)
 {
-	if (CurrentAnimation)
+	if (Skeleton && ActiveAnimation)
 	{
-		Animation = *CurrentAnimation;
+		Animation = *ActiveAnimation;
 	}
 }
 
 void USpriterSkeletonComponent::GetNextAnimation(FSpriterAnimation& Animation)
 {
-	if (NextAnimation)
+	if (Skeleton && NextAnimation)
 	{
 		Animation = *NextAnimation;
 	}
@@ -668,7 +865,7 @@ void USpriterSkeletonComponent::GetTimeline(UPARAM(ref)FSpriterAnimation& Animat
 {
 	if (Skeleton && !Animation.Name.IsEmpty())
 	{
-		if (TimelineIndex >= 0 && TimelineIndex < Animation.Timelines.Num())
+		if (Animation.Timelines.IsValidIndex(TimelineIndex))
 		{
 			Timeline = Animation.Timelines[TimelineIndex];
 		}
@@ -688,6 +885,26 @@ void USpriterSkeletonComponent::GetTimelineByName(UPARAM(ref)FSpriterAnimation& 
 		}
 	}
 }
+
+void USpriterSkeletonComponent::GetBoneRef(UPARAM(ref)FSpriterAnimation& Animation, UPARAM(ref)FSpriterMainlineKey& Key, const FString& BoneName, FSpriterRef& BoneRef)
+{
+	if (Skeleton  && Key.TimeInMS != INDEX_NONE &&  !BoneName.IsEmpty())
+	{
+		for (FSpriterRef& Ref : Key.BoneRefs)
+		{
+			FSpriterTimeline* Timeline = GetTimeline(Animation, Ref.TimelineIndex);
+
+			if (Timeline)
+			{
+				if (Timeline->Name.Equals(BoneName, ESearchCase::IgnoreCase))
+				{
+					BoneRef = Ref;
+				}
+			}
+		}
+	}
+}
+
 
 void USpriterSkeletonComponent::GetObjectRef(UPARAM(ref)FSpriterAnimation& Animation, UPARAM(ref)FSpriterMainlineKey& Key, const FString& Name, FSpriterObjectRef& ObjectRef)
 {
@@ -712,12 +929,11 @@ void USpriterSkeletonComponent::GetObjectInfo(int32 ObjectIndex, FSpriterObjectI
 {
 	if (Skeleton)
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			if (ObjectIndex >= 0 && ObjectIndex < Entity->Objects.Num())
+			if (ActiveEntity->Objects.IsValidIndex(ObjectIndex))
 			{
-				ObjectInfo = Entity->Objects[ObjectIndex];
+				ObjectInfo = ActiveEntity->Objects[ObjectIndex];
 			}
 		}
 	}
@@ -727,10 +943,9 @@ void USpriterSkeletonComponent::GetObjectInfoByName(const FString & Name, FSprit
 {
 	if (Skeleton && !Name.IsEmpty())
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			for (FSpriterObjectInfo& Object : Entity->Objects)
+			for (FSpriterObjectInfo& Object : ActiveEntity->Objects)
 			{
 				if (Object.Name.Equals(Name, ESearchCase::IgnoreCase))
 				{
@@ -745,10 +960,10 @@ void USpriterSkeletonComponent::GetFile(int32 FolderIndex, int32 FileIndex, FSpr
 {
 	if (Skeleton)
 	{
-		if (FolderIndex >= 0 && FolderIndex < Skeleton->ImportedData.Folders.Num())
+		if (Skeleton->ImportedData.Folders.IsValidIndex(FolderIndex))
 		{
 			FSpriterFolder* ChosenFolder = &Skeleton->ImportedData.Folders[FolderIndex];
-			if (ChosenFolder && FileIndex >= 0 && FileIndex < ChosenFolder->Files.Num())
+			if (ChosenFolder && ChosenFolder->Files.IsValidIndex(FileIndex))
 			{
 				File = ChosenFolder->Files[FileIndex];
 			}
@@ -837,9 +1052,9 @@ TArray<FSpriterMainlineKey*>* USpriterSkeletonComponent::GetMainlineKeys()
 
 		if (AnimationState == ESpriterAnimationState::BLENDING)
 		{
-			if (CurrentAnimation && NextAnimation)
+			if (ActiveAnimation && NextAnimation)
 			{
-				for (FSpriterMainlineKey& Key : CurrentAnimation->MainlineKeys)
+				for (FSpriterMainlineKey& Key : ActiveAnimation->MainlineKeys)
 				{
 					if (Key.TimeInMS <= CurrentTimeMS)
 					{
@@ -852,14 +1067,14 @@ TArray<FSpriterMainlineKey*>* USpriterSkeletonComponent::GetMainlineKeys()
 		}
 		else if (AnimationState == ESpriterAnimationState::PLAYING)
 		{
-			if (CurrentAnimation)
+			if (ActiveAnimation)
 			{
-				for (int32 Key = 0; Key < CurrentAnimation->MainlineKeys.Num(); ++Key)
+				for (int32 Key = 0; Key < ActiveAnimation->MainlineKeys.Num(); ++Key)
 				{
-					if (CurrentAnimation->MainlineKeys[Key].TimeInMS <= CurrentTimeMS)
+					if (ActiveAnimation->MainlineKeys[Key].TimeInMS <= CurrentTimeMS)
 					{
-						C1 = &CurrentAnimation->MainlineKeys[Key];
-						C2 = &CurrentAnimation->MainlineKeys[(Key + 1) % CurrentAnimation->MainlineKeys.Num()];
+						C1 = &ActiveAnimation->MainlineKeys[Key];
+						C2 = &ActiveAnimation->MainlineKeys[(Key + 1) % ActiveAnimation->MainlineKeys.Num()];
 					}
 				}
 			}
@@ -874,9 +1089,9 @@ TArray<FSpriterMainlineKey*>* USpriterSkeletonComponent::GetMainlineKeys()
 	return nullptr;
 }
 
-TArray<FSpriterFatTimelineKey*>* USpriterSkeletonComponent::GetTimelineKeys(const FString & Name)
+TArray<FSpriterFatTimelineKey*>* USpriterSkeletonComponent::GetTimelineKeys(const FString& TimelineName)
 {
-	if (Skeleton && !Name.IsEmpty())
+	if (Skeleton && !TimelineName.IsEmpty())
 	{
 		FSpriterTimeline* CurrentTimeline;
 		FSpriterTimeline* NextTimeline;
@@ -886,10 +1101,10 @@ TArray<FSpriterFatTimelineKey*>* USpriterSkeletonComponent::GetTimelineKeys(cons
 
 		if (AnimationState == ESpriterAnimationState::BLENDING)
 		{
-			if (CurrentAnimation && NextAnimation)
+			if (ActiveAnimation && NextAnimation)
 			{
-				CurrentTimeline = GetTimeline(*CurrentAnimation, Name);
-				NextTimeline = GetTimeline(*NextAnimation, Name);
+				CurrentTimeline = GetTimeline(*ActiveAnimation, TimelineName);
+				NextTimeline = GetTimeline(*NextAnimation, TimelineName);
 				if (CurrentTimeline && NextTimeline)
 				{
 					for (FSpriterFatTimelineKey& Key : CurrentTimeline->Keys)
@@ -911,9 +1126,9 @@ TArray<FSpriterFatTimelineKey*>* USpriterSkeletonComponent::GetTimelineKeys(cons
 		}
 		else
 		{
-			if (CurrentAnimation)
+			if (ActiveAnimation)
 			{
-				CurrentTimeline = GetTimeline(*CurrentAnimation, Name);
+				CurrentTimeline = GetTimeline(*ActiveAnimation, TimelineName);
 				if (CurrentTimeline)
 				{
 					for (int Key = 0; Key < CurrentTimeline->Keys.Num(); ++Key)
@@ -937,15 +1152,32 @@ TArray<FSpriterFatTimelineKey*>* USpriterSkeletonComponent::GetTimelineKeys(cons
 	return nullptr;
 }
 
-//Data Grabbers
-FSpriterEntity* USpriterSkeletonComponent::GetEntity()
+// C++ Data Grabbers
+FSpriterEntity* USpriterSkeletonComponent::GetEntity(int32 EntityIndex)
 {
-	if (Skeleton  && Skeleton->ImportedData.Entities.Num() > 0)
+	if (Skeleton  && Skeleton->ImportedData.Entities.Num() > 0 && Skeleton->ImportedData.Entities.IsValidIndex(EntityIndex))
 	{
-		return &Skeleton->ImportedData.Entities[0];
+		return &Skeleton->ImportedData.Entities[EntityIndex];
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_GetEntity() : Coulld'nt find Entity, Returned Null!"));
+	UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_GetEntity(EntityIndex) : Coulld'nt find Entity, Returned Null!"));
+	return nullptr;
+}
+
+FSpriterEntity* USpriterSkeletonComponent::GetEntity(const FString& EntityName)
+{
+	if (Skeleton  && Skeleton->ImportedData.Entities.Num() > 0 && !EntityName.IsEmpty())
+	{
+		for (FSpriterEntity& Entity : Skeleton->ImportedData.Entities)
+		{
+			if (Entity.Name.Equals(EntityName, ESearchCase::IgnoreCase))
+			{
+				return &Entity;
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_GetEntity(EntityName) : Coulld'nt find Entity, Returned Null!"));
 	return nullptr;
 }
 
@@ -953,12 +1185,11 @@ FSpriterAnimation* USpriterSkeletonComponent::GetAnimation(int32 AnimationIndex)
 {
 	if (Skeleton)
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			if (AnimationIndex >= 0 && AnimationIndex < Entity->Animations.Num())
+			if (ActiveEntity->Animations.IsValidIndex(AnimationIndex))
 			{
-				return &Entity->Animations[AnimationIndex];
+				return &ActiveEntity->Animations[AnimationIndex];
 			}
 		}
 	}
@@ -972,10 +1203,9 @@ FSpriterAnimation* USpriterSkeletonComponent::GetAnimation(const FString& Animat
 {
 	if (Skeleton && !AnimationName.IsEmpty())
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			for (FSpriterAnimation& Anim : Entity->Animations)
+			for (FSpriterAnimation& Anim : ActiveEntity->Animations)
 			{
 				if (Anim.Name.Equals(AnimationName, ESearchCase::IgnoreCase))
 				{
@@ -1017,9 +1247,30 @@ FSpriterTimeline* USpriterSkeletonComponent::GetTimeline(FSpriterAnimation& Anim
 	return nullptr;
 }
 
-FSpriterObjectRef* USpriterSkeletonComponent::GetObjectRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& Name)
+FSpriterRef* USpriterSkeletonComponent::GetBoneRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& BoneName)
 {
-	if (Skeleton  && Key.TimeInMS != INDEX_NONE &&  !Name.IsEmpty())
+	if (Skeleton  && Key.TimeInMS != INDEX_NONE &&  !BoneName.IsEmpty())
+	{
+		for (FSpriterRef& Ref : Key.BoneRefs)
+		{
+			FSpriterTimeline* Timeline = GetTimeline(Animation, Ref.TimelineIndex);
+
+			if (Timeline)
+			{
+				if (Timeline->Name.Equals(BoneName, ESearchCase::IgnoreCase))
+				{
+					return &Ref;
+				}
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+FSpriterObjectRef* USpriterSkeletonComponent::GetObjectRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& ObjectName)
+{
+	if (Skeleton  && Key.TimeInMS != INDEX_NONE &&  !ObjectName.IsEmpty())
 	{
 		for (FSpriterObjectRef& Ref : Key.ObjectRefs)
 		{
@@ -1027,7 +1278,7 @@ FSpriterObjectRef* USpriterSkeletonComponent::GetObjectRef(FSpriterAnimation& An
 
 			if (Timeline)
 			{
-				if (Timeline->Name.Equals(Name, ESearchCase::IgnoreCase))
+				if (Timeline->Name.Equals(ObjectName, ESearchCase::IgnoreCase))
 				{
 					return &Ref;
 				}
@@ -1042,12 +1293,11 @@ FSpriterObjectInfo* USpriterSkeletonComponent::GetObjectInfo(int32 ObjectIndex)
 {
 	if (Skeleton)
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			if (ObjectIndex >= 0 && ObjectIndex < Entity->Objects.Num())
+			if (ActiveEntity->Objects.IsValidIndex(ObjectIndex))
 			{
-				return &Entity->Objects[ObjectIndex];
+				return &ActiveEntity->Objects[ObjectIndex];
 			}
 		}
 	}
@@ -1061,10 +1311,9 @@ FSpriterObjectInfo* USpriterSkeletonComponent::GetObjectInfo(const FString & Nam
 {
 	if (Skeleton && !Name.IsEmpty())
 	{
-		FSpriterEntity* Entity = GetEntity();
-		if (Entity)
+		if (ActiveEntity)
 		{
-			for (FSpriterObjectInfo& Object : Entity->Objects)
+			for (FSpriterObjectInfo& Object : ActiveEntity->Objects)
 			{
 				if (Object.Name.Equals(Name, ESearchCase::IgnoreCase))
 				{
@@ -1096,7 +1345,7 @@ FSpriterFile* USpriterSkeletonComponent::GetFile(int32 Folder, int32 File)
 	return nullptr;
 }
 
-// Instance Grabbers
+// C++ Instance Grabbers
 FSpriterBoneInstance* USpriterSkeletonComponent::GetBone(const FString & BoneName)
 {
 	if (Skeleton && !BoneName.IsEmpty())
@@ -1146,7 +1395,6 @@ bool USpriterSkeletonComponent::IsInitialized(bool bShouldInit)
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("USpriterSkeletonComponent_IsInitialized() : Skeleton: Yes, Objects: No!"));
 			return false;
 		}
 	}

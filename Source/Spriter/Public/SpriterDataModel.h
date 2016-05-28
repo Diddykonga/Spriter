@@ -10,6 +10,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 struct FSpriterSCON;
+struct FSpriterEntity;
 struct FSpriterObjectInfo;
 struct FSpriterAnimation;
 struct FSpriterTimeline;
@@ -100,7 +101,7 @@ struct SPRITER_API  FSpriterSpatialInfo
 public:
 	FSpriterSpatialInfo();
 
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 
 	FTransform ConvertToTransform() const;
 };
@@ -133,7 +134,7 @@ struct SPRITER_API  FSpriterFile
 
 public:
 	FSpriterFile();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -153,7 +154,7 @@ public:
 
 public:
 	FSpriterFolder();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -179,7 +180,7 @@ public:
 
 public:
 	FSpriterMapInstruction();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -199,7 +200,7 @@ public:
 	
 public:
 	FSpriterTagLineKey();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -216,7 +217,7 @@ public:
 
 public:
  	FSpriterTagLine();
- 	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+ 	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -242,7 +243,7 @@ public:
 
 public:
 	FSpriterValLineKey();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -262,7 +263,7 @@ public:
 
 public:
 	FSpriterValLine();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -282,7 +283,7 @@ public:
 
 public:
 	FSpriterMeta();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -305,7 +306,7 @@ public:
 
 public:
 	FSpriterRefCommon();
-	bool ParseCommonFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseCommonFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -317,7 +318,7 @@ struct SPRITER_API  FSpriterRef : public FSpriterRefCommon
 public:
 	GENERATED_USTRUCT_BODY()
 
-	bool ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -334,7 +335,7 @@ public:
 
 public:
 	FSpriterObjectRef();
-	bool ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -360,7 +361,7 @@ public:
 
 public:
 	FSpriterMainlineKey();
-	bool ParseFromJSON(FSpriterSCON* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, FSpriterAnimation* Animation, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -389,7 +390,7 @@ public:
 
 public:
 	FSpriterTimelineKey();
-	bool ParseBasicsFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseBasicsFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -422,9 +423,9 @@ struct SPRITER_API  FSpriterFatTimelineKey : public FSpriterTimelineKey
 public:
 	FSpriterFatTimelineKey();
 
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType);
-	bool ParseBoneFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
-	bool ParseObjectFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType);
+	bool ParseBoneFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseObjectFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent, const ESpriterObjectType ObjectType);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -453,7 +454,7 @@ public:
 
 public:
 	FSpriterTimeline();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -470,7 +471,7 @@ public:
 
 public:
 	FSpriterEventLineKey();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -493,7 +494,7 @@ public:
 
 public:
 	FSpriterEventLine();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -531,7 +532,7 @@ public:
 
 public:
 	FSpriterAnimation();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -551,7 +552,7 @@ public:
 
 public:
 	FSpriterCharacterMapData();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -577,7 +578,7 @@ public:
 
 public:
 	FSpriterVariableDefinition();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -612,7 +613,7 @@ public:
 
 public:
 	FSpriterObjectInfo();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(FSpriterEntity* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -623,7 +624,7 @@ struct SPRITER_API  FSpriterEntity
 {
 public:
 	GENERATED_USTRUCT_BODY()
-		
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
 	FString Name;
 
@@ -641,7 +642,7 @@ public:
 
 public:
 	FSpriterEntity();
-	bool ParseFromJSON(FSpriterSCON* Owner, TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
+	bool ParseFromJSON(TSharedPtr<FJsonObject> Tree, const FString& NameForErrors, bool bSilent);
 };
 
 //////////////////////////////////////////////////////////////////////////
