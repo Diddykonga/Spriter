@@ -209,11 +209,10 @@ UObject* USpriterImportFactory::FactoryCreateText(UClass* InClass, UObject* InPa
 					Entry.ResultSprite = ImportedSprite;
 					DefaultCharacterMap->Entrys.Add(Entry);
 
-					const ESpritePivotMode::Type PivotMode = ConvertNormalizedPivotPointToPivotMode(File.PivotX, File.PivotY);
 					const float PivotInPixelsX = File.Width * File.PivotX;
 					const float PivotInPixelsY = File.Height * (1.0f-File.PivotY);
 
-					ImportedSprite->SetPivotMode(PivotMode, FVector2D(PivotInPixelsX, PivotInPixelsY));
+					ImportedSprite->SetPivotMode(ESpritePivotMode::Custom, FVector2D(PivotInPixelsX, PivotInPixelsY));
 
 					FSpriteAssetInitParameters SpriteInitParams;
 					SpriteInitParams.SetTextureAndFill(ImportedTexture);

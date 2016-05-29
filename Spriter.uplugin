@@ -1,7 +1,7 @@
 {
 	"FileVersion" : 3,
 	"Version" : 1,
-	"VersionName" : "0.5",
+	"VersionName" : "0.6",
 	"FriendlyName" : "Spriter",
 	"Description" : "Importer and Framework for supporting Spriter .scon files inside of UE4.",
 	"Category" : "2D",

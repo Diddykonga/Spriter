@@ -405,7 +405,7 @@ FTransform FSpriterSpatialInfo::ConvertToTransform() const
 	FTransform Result;
 	Result.SetTranslation((X * PaperAxisX) + (Y * PaperAxisY));
 	Result.SetRotation(FRotator(AngleInDegrees, 0.0f, 0.0f).Quaternion());
-	Result.SetScale3D((ScaleX * PaperAxisX) + (ScaleY * PaperAxisY) + (PaperAxisZ * 1.0f));
+	Result.SetScale3D((ScaleX * PaperAxisX) + (ScaleY * PaperAxisY) + (PaperAxisZ * -1.0f));
 
 	return Result;
 }
@@ -1480,13 +1480,17 @@ bool FSpriterVariableDefinition::ParseFromJSON(FSpriterEntity* Owner, TSharedPtr
 	}
 
 	// Parse the default value
+	double DefaultDouble;
 	if ((VariableType == ESpriterVariableType::Float) || (VariableType == ESpriterVariableType::Integer))
 	{
-		DefaultValueNumber = Tree->GetNumberField(TEXT("default"));
-		if (DefaultValueNumber == NULL)
+		if(!Tree->TryGetNumberField(TEXT("default"), DefaultDouble))
 		{
 			SPRITER_IMPORT_ERROR(TEXT("Expected a number field named 'default' in '%s'."), *LocalNameForErrors);
 			bSuccessfullyParsed = false;
+		}
+		else
+		{
+			DefaultValueNumber = DefaultDouble;
 		}
 	}
 	else if (VariableType == ESpriterVariableType::String)

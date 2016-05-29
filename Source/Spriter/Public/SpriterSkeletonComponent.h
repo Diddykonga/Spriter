@@ -73,8 +73,87 @@ public:
 	FSpriterSpriteInstance();
 };
 
+USTRUCT(BlueprintType)
+struct SPRITER_API FSpriterBoxInstance
+{
+	GENERATED_USTRUCT_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		bool IsActive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FString ParentBoneName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		int32 ZIndex;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FTransform RelativeTransform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FTransform WorldTransform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FVector Pivot;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FVector Scale;
+
+	FSpriterBoxInstance();
+};
+
+USTRUCT(BlueprintType)
+struct SPRITER_API FSpriterPointInstance
+{
+	GENERATED_USTRUCT_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		bool IsActive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FString ParentBoneName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		int32 ZIndex;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FTransform RelativeTransform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FTransform WorldTransform;
+
+	FSpriterPointInstance();
+};
+
+USTRUCT(BlueprintType)
+struct SPRITER_API FSpriterEventInstance
+{
+	GENERATED_USTRUCT_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		FString Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		int32 PreviousCallTimeMS;
+
+	FSpriterEventInstance();
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FAnimationEnded, USpriterSkeletonComponent*, Skeleton, const FSpriterAnimation&, EndedAnimation, const bool, WasForced);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FAnimationStarted, USpriterSkeletonComponent*, Skeleton, const FSpriterAnimation&, StartedAnimation, const bool, FirstTime);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAnimationEvent, USpriterSkeletonComponent*, Skeleton, const FString&, EventName);
 
 UCLASS( ClassGroup=(Spriter), meta=(BlueprintSpawnableComponent))
 class SPRITER_API USpriterSkeletonComponent : public USceneComponent
@@ -96,13 +175,25 @@ public:
 		TArray<FSpriterSpriteInstance> Sprites;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		TArray<FSpriterBoxInstance> Boxs;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		TArray<FSpriterPointInstance> Points;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
+		TArray<FSpriterEventInstance> Events;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
 		ESpriterAnimationState AnimationState;
 
 	UPROPERTY(BlueprintAssignable, Category = "Spriter")
-		FAnimationStarted OnAnimationStarted;
+		FAnimationStarted	 OnAnimationStarted;
 
 	UPROPERTY(BlueprintAssignable, Category = "Spriter")
 		FAnimationEnded OnAnimationEnded;
+
+	UPROPERTY(BlueprintAssignable, Category = "Spriter")
+		FAnimationEvent OnEvent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Spriter")
 		float CurrentTimeMS;
@@ -182,9 +273,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void UpdateSprites();
 
-	// Clear Bone's and Sprite's arrays and destroy all Sprite Components
+	// Update the Boxs
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void UpdateBoxs();
+
+	// Update the Pionts
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void UpdatePoints();
+
+	// Update the Events
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void UpdateEvents();
+
+	// Clear all Object arrays and destroy all Sprite Components
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
 		void CleanupObjects();
+
+	// Clear all Object Meta Data
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void CleanupObjectData();
 
 	// Check if we have a Skeleton Asset, and if all Sprite and Bones instances have been created for it. If bShouldInit is true, this will always return true.
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
@@ -237,10 +344,36 @@ public:
 
 	// Blueprint Instance Grabbers
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
-		void GetBone(const FString& BoneName, FSpriterBoneInstance& Bone);
+		void GetBone(int32 BoneIndex, FSpriterBoneInstance& Bone);
 
 	UFUNCTION(BlueprintCallable, Category = "Spriter")
-		void GetSprite(const FString& SpriteName, FSpriterSpriteInstance& Sprite);
+		void GetBoneByName(const FString& BoneName, FSpriterBoneInstance& Bone);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetSprite(int32 SpriteIndex, FSpriterSpriteInstance& Sprite);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetSpriteByName(const FString& SpriteName, FSpriterSpriteInstance& Sprite);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetBox(int32 BoxIndex, FSpriterBoxInstance& Box);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetBoxByName(const FString& BoxName, FSpriterBoxInstance& Box);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetPoint(int32 PointIndex, FSpriterPointInstance& Point);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetPointByName(const FString& PointName, FSpriterPointInstance& Point);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetEvent(int32 EventIndex, FSpriterEventInstance& Event);
+
+	UFUNCTION(BlueprintCallable, Category = "Spriter")
+		void GetEventByName(const FString& EventName, FSpriterEventInstance& Event);
+
+
 
 
 	// Get Sprite from Character Map based on Name of passed in File
@@ -269,6 +402,10 @@ public:
 
 	FSpriterTimeline* GetTimeline(FSpriterAnimation& Animation, const FString& TimelineName);
 
+	FSpriterEventLine* GetEventLine(FSpriterAnimation& Animation, int32 EventIndex);
+
+	FSpriterEventLine* GetEventLine(FSpriterAnimation& Animation, const FString& EventName);
+
 	FSpriterRef* GetBoneRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& BoneName);
 
 	FSpriterObjectRef* GetObjectRef(FSpriterAnimation& Animation, FSpriterMainlineKey& Key, const FString& ObjectName);
@@ -281,9 +418,25 @@ public:
 
 
 	// C++ Instance Grabbers
+	FSpriterBoneInstance* GetBone(int32 BoneIndex);
+
 	FSpriterBoneInstance* GetBone(const FString& BoneName);
 
+	FSpriterSpriteInstance* GetSprite(int32 SpriteIndex);
+
 	FSpriterSpriteInstance* GetSprite(const FString& SpriteName);
+
+	FSpriterBoxInstance* GetBox(int32 BoxIndex);
+
+	FSpriterBoxInstance* GetBox(const FString& BoxName);
+
+	FSpriterPointInstance* GetPoint(int32 PointIndex);
+
+	FSpriterPointInstance* GetPoint(const FString& PointName);
+
+	FSpriterEventInstance* GetEvent(int32 EventIndex);
+
+	FSpriterEventInstance* GetEvent(const FString& EventName);
 
 	// Amount to offset Sprites according to thier ZIndex
 	static const float SPRITER_ZOFFSET;
@@ -295,9 +448,11 @@ protected:
 
 
 	// Animation Dependant
-	bool bAnimationWasStarted;
+	bool bFirstTime;
 
-	TArray<FSpriterMainlineKey*>* GetMainlineKeys();
+	TArray<FSpriterMainlineKey*> GetMainlineKeys();
 
-	TArray<FSpriterFatTimelineKey*>* GetTimelineKeys(const FString& TimelineName);
+	TArray<FSpriterFatTimelineKey*> GetTimelineKeys(const FString& ObjectName);
+
+	TArray<FSpriterEventLineKey*> GetEventLineKeys(const FString& EventName);
 };
